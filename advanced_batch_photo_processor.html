@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Batch Photo Processor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        /* Custom scrollbar for sidebar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3b82f6;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #3b82f6;
+        }
+        .drag-active {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden text-gray-800">
+
+    <!-- Sidebar Settings Panel -->
+    <aside class="w-80 bg-white border-r border-gray-200 h-full overflow-y-auto flex flex-col shadow-sm z-10 shrink-0">
+        <div class="p-5 border-b border-gray-100 bg-gray-50 sticky top-0 z-20">
+            <h1 class="text-xl font-bold text-gray-900">Photo Processor</h1>
+            <p class="text-xs text-gray-500 mt-1">Configure before uploading</p>
+        </div>
+
+        <div class="p-5 flex flex-col gap-6">
+            
+            <!-- Input Mode -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">1. Input Mode</h3>
+                <div class="flex gap-2">
+                    <label class="flex-1 text-center cursor-pointer">
+                        <input type="radio" name="inputMode" value="files" class="peer hidden" checked>
+                        <div class="px-3 py-2 text-sm border border-gray-300 rounded-md peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 transition">Individual Files</div>
+                    </label>
+                    <label class="flex-1 text-center cursor-pointer">
+                        <input type="radio" name="inputMode" value="folder" class="peer hidden">
+                        <div class="px-3 py-2 text-sm border border-gray-300 rounded-md peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 transition">Entire Folder</div>
+                    </label>
+                </div>
+            </section>
+
+            <!-- Filename Parsing -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">2. Filename Parsing</h3>
+                <label class="block text-xs text-gray-500 mb-1">Extraction Method</label>
+                <select id="cfg-parse-method" class="w-full px-3 py-2 mb-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    <option value="delimiter">Split by Delimiter</option>
+                    <option value="chars">Skip first N characters</option>
+                </select>
+
+                <!-- Delimiter Options -->
+                <div id="parse-delimiter-wrapper" class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Delimiter</label>
+                        <select id="cfg-delimiter-char" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                            <option value=" ">Space ( )</option>
+                            <option value="_">Underscore (_)</option>
+                            <option value="-">Hyphen (-)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Skip how many delimiters?</label>
+                        <input type="number" id="cfg-delimiter-index" value="1" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <p class="text-[10px] text-gray-400 mt-1">E.g., "1" skips everything before the 1st delimiter.</p>
+                    </div>
+                </div>
+
+                <!-- Character Options -->
+                <div id="parse-chars-wrapper" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Characters to skip</label>
+                        <input type="number" id="cfg-skip-chars" value="5" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <p class="text-[10px] text-gray-400 mt-1">E.g., "5" turns "1234 Name" into "Name".</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dimensions & Aspect Ratio -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">3. Dimensions</h3>
+                <div class="flex gap-3 mb-3">
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-500 mb-1">Target Width (px)</label>
+                        <input type="number" id="cfg-width" value="400" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-500 mb-1">Target Height (px)</label>
+                        <input type="number" id="cfg-height" value="500" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="cfg-aspect-ratio" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                    <span class="text-sm text-gray-600">Maintain Aspect Ratio</span>
+                </label>
+            </section>
+
+            <!-- Text Overlays -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">4. Text Overlays</h3>
+                
+                <!-- Name Controls -->
+                <div class="mb-4 p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label class="flex items-center gap-2 cursor-pointer mb-2">
+                        <input type="checkbox" id="cfg-add-name" checked class="w-4 h-4 text-blue-600 rounded border-gray-300">
+                        <span class="text-sm font-medium text-gray-800">Add Student Name</span>
+                    </label>
+                    <div class="pl-6 flex items-center gap-2 mt-2">
+                        <label class="text-xs text-gray-500">Sizing:</label>
+                        <select id="cfg-name-sizing" class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded outline-none">
+                            <option value="dynamic">Auto-Shrink to Fit</option>
+                            <option value="fixed">Fixed Pixel Size</option>
+                        </select>
+                    </div>
+                    <div id="name-fixed-size-wrapper" class="pl-6 mt-2 hidden">
+                        <label class="text-xs text-gray-500">Fixed Size (px):</label>
+                        <input type="number" id="cfg-name-fixed-size" value="22" class="w-16 px-2 py-1 text-xs border border-gray-300 rounded outline-none ml-2">
+                    </div>
+                </div>
+
+                <!-- Date Controls -->
+                <div class="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <label class="flex items-center gap-2 cursor-pointer mb-2">
+                        <input type="checkbox" id="cfg-add-date" checked class="w-4 h-4 text-blue-600 rounded border-gray-300">
+                        <span class="text-sm font-medium text-gray-800">Add Date</span>
+                    </label>
+                    <div class="pl-6 mt-2 space-y-2">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Date Text:</label>
+                            <input type="text" id="cfg-date-text" value="07.10.2026" class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Font Size (px):</label>
+                            <input type="number" id="cfg-date-size" value="22" class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded outline-none">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Output Quality -->
+            <section>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">5. File Compression</h3>
+                <label class="block text-sm text-gray-600 mb-1">Max File Size (KB)</label>
+                <div class="relative">
+                    <input type="number" id="cfg-max-kb" value="40" min="1" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-sm pr-10">
+                    <span class="absolute right-3 top-2 text-sm text-gray-400">KB</span>
+                </div>
+            </section>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col h-full bg-white relative">
+        <!-- Hidden file inputs -->
+        <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+        <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+
+        <div class="flex-1 overflow-y-auto p-8 flex flex-col">
+            
+            <!-- Header & Actions -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">Processing Queue</h2>
+                    <p class="text-sm text-gray-500 mt-1">Configure settings on the left, then upload photos.</p>
+                </div>
+                <button id="downloadAllBtn" class="hidden bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download All as ZIP
+                </button>
+            </div>
+
+            <!-- Messages -->
+            <div id="messageBox" class="hidden w-full p-4 rounded-md mb-6 text-sm text-center font-medium"></div>
+
+            <!-- Upload Dropzone -->
+            <div id="dropZone" class="w-full border-2 border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-50 rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 mb-8 min-h-[250px] shrink-0">
+                <div class="bg-white p-4 rounded-full shadow-sm text-blue-500 mb-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                </div>
+                <h3 id="dropText" class="text-lg font-semibold text-gray-700">Click to upload Individual Files</h3>
+                <p class="text-sm text-gray-500 mt-2">or drag and drop them here</p>
+            </div>
+
+            <!-- Processing Loader -->
+            <div id="loadingIndicator" class="hidden flex-col items-center justify-center py-8">
+                <div class="animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600"></div>
+                <p class="text-blue-600 font-medium mt-3" id="loadingText">Processing images...</p>
+            </div>
+
+            <!-- Results Grid -->
+            <div id="resultsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-12">
+                <!-- Cards injected via JS -->
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // DOM Elements - Configs
+        const modeRadios = document.getElementsByName('inputMode');
+        
+        const parseMethodSelect = document.getElementById('cfg-parse-method');
+        const parseDelimiterWrapper = document.getElementById('parse-delimiter-wrapper');
+        const parseCharsWrapper = document.getElementById('parse-chars-wrapper');
+        const delimiterCharSelect = document.getElementById('cfg-delimiter-char');
+        const delimiterIndexInput = document.getElementById('cfg-delimiter-index');
+        const skipCharsInput = document.getElementById('cfg-skip-chars');
+
+        const targetWidthInput = document.getElementById('cfg-width');
+        const targetHeightInput = document.getElementById('cfg-height');
+        const maintainAspectRatioCheckbox = document.getElementById('cfg-aspect-ratio');
+        
+        const addNameCheckbox = document.getElementById('cfg-add-name');
+        const nameSizingSelect = document.getElementById('cfg-name-sizing');
+        const nameFixedSizeInput = document.getElementById('cfg-name-fixed-size');
+        const nameFixedSizeWrapper = document.getElementById('name-fixed-size-wrapper');
+        
+        const addDateCheckbox = document.getElementById('cfg-add-date');
+        const dateTextInput = document.getElementById('cfg-date-text');
+        const dateSizeInput = document.getElementById('cfg-date-size');
+        
+        const maxKbInput = document.getElementById('cfg-max-kb');
+
+        // DOM Elements - UI
+        const dropZone = document.getElementById('dropZone');
+        const dropText = document.getElementById('dropText');
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+        const resultsGrid = document.getElementById('resultsGrid');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const messageBox = document.getElementById('messageBox');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const loadingText = document.getElementById('loadingText');
+
+        // State variables
+        let currentZip = new JSZip();
+        let processedImagesCount = 0;
+        let isFolderMode = false;
+
+        // UI Interactions for Sidebar
+        nameSizingSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'fixed') {
+                nameFixedSizeWrapper.classList.remove('hidden');
+            } else {
+                nameFixedSizeWrapper.classList.add('hidden');
+            }
+        });
+
+        parseMethodSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'delimiter') {
+                parseDelimiterWrapper.classList.remove('hidden');
+                parseCharsWrapper.classList.add('hidden');
+            } else {
+                parseDelimiterWrapper.classList.add('hidden');
+                parseCharsWrapper.classList.remove('hidden');
+            }
+        });
+
+        // Handle Input Mode Toggle
+        Array.from(modeRadios).forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                isFolderMode = e.target.value === 'folder';
+                if (isFolderMode) {
+                    dropText.innerHTML = "Click to select <b>Root Folder</b>";
+                } else {
+                    dropText.innerHTML = "Click to upload <b>Individual Files</b>";
+                }
+            });
+        });
+
+        // Trigger correct file dialog
+        dropZone.addEventListener('click', () => {
+            if (isFolderMode) {
+                folderInput.click();
+            } else {
+                fileInput.click();
+            }
+        });
+
+        // Drag and Drop (Standard files fallback)
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active');
+        });
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        // File Selection Handlers
+        fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
+        folderInput.addEventListener('change', (e) => { handleFiles(e.target.files); folderInput.value = ''; });
+
+        function showMessage(msg, type = 'error') {
+            if (!msg) {
+                messageBox.classList.add('hidden');
+                return;
+            }
+            messageBox.textContent = msg;
+            messageBox.classList.remove('hidden');
+            messageBox.className = `w-full p-4 rounded-md mb-6 text-sm text-center font-medium ${type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`;
+        }
+
+        async function handleFiles(fileList) {
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) {
+                showMessage("No valid image files found.");
+                return;
+            }
+
+            showMessage('');
+            loadingIndicator.classList.remove('hidden');
+            loadingIndicator.classList.add('flex');
+            dropZone.style.display = 'none';
+
+            // Gather current config
+            const config = {
+                parseMethod: parseMethodSelect.value,
+                delimiterChar: delimiterCharSelect.value,
+                delimiterIndex: parseInt(delimiterIndexInput.value) || 0,
+                skipChars: parseInt(skipCharsInput.value) || 0,
+                targetWidth: parseInt(targetWidthInput.value) || 400,
+                targetHeight: parseInt(targetHeightInput.value) || 500,
+                maintainRatio: maintainAspectRatioCheckbox.checked,
+                addName: addNameCheckbox.checked,
+                nameSizing: nameSizingSelect.value,
+                nameFixedSize: parseInt(nameFixedSizeInput.value) || 22,
+                addDate: addDateCheckbox.checked,
+                dateText: dateTextInput.value,
+                dateSize: parseInt(dateSizeInput.value) || 22,
+                maxKb: parseInt(maxKbInput.value) || 40
+            };
+
+            for (let i = 0; i < files.length; i++) {
+                loadingText.textContent = `Processing image ${i + 1} of ${files.length}...`;
+                try {
+                    await processImage(files[i], config);
+                } catch (err) {
+                    console.error("Error processing " + files[i].name, err);
+                }
+            }
+
+            loadingIndicator.classList.add('hidden');
+            loadingIndicator.classList.remove('flex');
+            dropZone.style.display = 'flex';
+        }
+
+        function extractName(filename, config) {
+            let base = filename.substring(0, filename.lastIndexOf('.')) || filename;
+            
+            if (config.parseMethod === 'delimiter') {
+                let parts = base.split(config.delimiterChar);
+                if (parts.length > config.delimiterIndex) {
+                    // Re-join the remaining parts with the delimiter in case the name contains it (e.g., spaces in a full name)
+                    return parts.slice(config.delimiterIndex).join(config.delimiterChar).trim();
+                }
+                return base.trim();
+            } else {
+                // Skip N characters method
+                return base.substring(config.skipChars).trim();
+            }
+        }
+
+        function processImage(file, config) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            
+                            // 1. Calculate image dimensions (CRITICAL FIX)
+                            let imgDrawW = config.targetWidth;
+                            let imgDrawH = config.targetHeight;
+                            
+                            if (config.maintainRatio) {
+                                // Scale to fit exactly within target constraints (allow both upscaling and downscaling)
+                                const ratio = Math.min(config.targetWidth / img.width, config.targetHeight / img.height);
+                                imgDrawW = Math.round(img.width * ratio);
+                                imgDrawH = Math.round(img.height * ratio);
+                            }
+
+                            // 2. Calculate text band height dynamically based on active checkboxes
+                            let bandHeight = 0;
+                            const PADDING_TOP = 20;
+                            const SPACING = 10;
+                            const PADDING_BOTTOM = 20;
+
+                            if (config.addName || config.addDate) {
+                                bandHeight += PADDING_TOP;
+                                if (config.addName) bandHeight += 25; // Approximate line height
+                                if (config.addName && config.addDate) bandHeight += SPACING;
+                                if (config.addDate) bandHeight += config.dateSize; 
+                                bandHeight += PADDING_BOTTOM;
+                            }
+
+                            canvas.width = imgDrawW;
+                            canvas.height = imgDrawH + bandHeight;
+
+                            // 3. Draw Background & Image
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            
+                            // Center image horizontally if maintaining ratio in a fixed canvas
+                            // (Actually, canvas width shrinks to match ratio, so no centering needed)
+                            ctx.drawImage(img, 0, 0, imgDrawW, imgDrawH);
+
+                            // 4. Draw Text
+                            if (config.addName || config.addDate) {
+                                ctx.fillStyle = '#000000';
+                                ctx.textAlign = 'center';
+                                const centerX = canvas.width / 2;
+                                let currentY = imgDrawH + PADDING_TOP;
+
+                                // Draw Name
+                                if (config.addName) {
+                                    let studentName = extractName(file.name, config);
+                                    let nameFontSize = config.nameSizing === 'fixed' ? config.nameFixedSize : 28;
+                                    
+                                    ctx.font = `bold ${nameFontSize}px Arial`;
+                                    
+                                    if (config.nameSizing === 'dynamic') {
+                                        while (ctx.measureText(studentName).width > (canvas.width - 20) && nameFontSize > 10) {
+                                            nameFontSize--;
+                                            ctx.font = `bold ${nameFontSize}px Arial`;
+                                        }
+                                    }
+                                    
+                                    currentY += (nameFontSize * 0.75); // Adjust baseline
+                                    ctx.fillText(studentName, centerX, currentY);
+                                    currentY += SPACING;
+                                }
+
+                                // Draw Date
+                                if (config.addDate) {
+                                    if (config.addName) currentY += 5; // Extra gap if name exists
+                                    ctx.font = `bold ${config.dateSize}px Arial`;
+                                    currentY += (config.dateSize * 0.75);
+                                    ctx.fillText(config.dateText, centerX, currentY);
+                                }
+                            }
+
+                            // 5. Compress and Save
+                            const fullPath = file.webkitRelativePath || file.name;
+                            const rawFilename = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                            
+                            await performCompressionLoop(canvas, fullPath, rawFilename, config.maxKb);
+                            resolve();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function performCompressionLoop(canvas, fullPath, rawFilename, maxKb) {
+            let quality = 0.95;
+            let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+            
+            while (blob.size > maxKb * 1024 && quality > 0.1) {
+                quality -= 0.05;
+                blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+            }
+            
+            addResultToUI(blob, fullPath, rawFilename);
+        }
+
+        function addResultToUI(blob, fullPath, rawFilename) {
+            const finalPath = fullPath.replace(/\.[^/.]+$/, ".jpg");
+            const finalFilename = `${rawFilename}.jpg`;
+            const url = URL.createObjectURL(blob);
+            const kbSize = (blob.size / 1024).toFixed(1);
+            
+            // Add to ZIP
+            currentZip.file(finalPath, blob);
+            processedImagesCount++;
+            
+            if (processedImagesCount > 0) {
+                downloadAllBtn.classList.remove('hidden');
+            }
+
+            // Create Card
+            const card = document.createElement('div');
+            card.className = 'bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden';
+            
+            const badgeClass = blob.size > parseInt(maxKbInput.value) * 1024 ? 'bg-red-100 text-red-700 border-red-200' : 'bg-green-100 text-green-700 border-green-200';
+
+            card.innerHTML = `
+                <div class="bg-gray-100 relative p-3 flex justify-center items-center min-h-[180px]">
+                    <img src="${url}" class="max-h-40 object-contain shadow-sm border border-gray-200 bg-white">
+                    <span class="absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded border ${badgeClass}">
+                        ${kbSize} KB
+                    </span>
+                </div>
+                <div class="p-3 flex flex-col flex-1">
+                    <p class="text-sm font-semibold text-gray-800 truncate mb-1" title="${finalFilename}">${finalFilename}</p>
+                    <p class="text-[10px] text-gray-500 truncate mb-3" title="${finalPath}">${finalPath}</p>
+                    <div class="mt-auto flex gap-2">
+                        <a href="${url}" download="${finalFilename}" class="flex-1 text-center bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 text-xs font-semibold py-1.5 rounded transition">
+                            Download
+                        </a>
+                    </div>
+                </div>
+            `;
+            
+            resultsGrid.appendChild(card);
+        }
+
+        downloadAllBtn.addEventListener('click', async () => {
+            if (processedImagesCount === 0) return;
+            
+            const originalText = downloadAllBtn.innerHTML;
+            downloadAllBtn.innerHTML = '<div class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div> Zipping...';
+            downloadAllBtn.disabled = true;
+
+            try {
+                const zipBlob = await currentZip.generateAsync({ type: "blob" });
+                const zipUrl = URL.createObjectURL(zipBlob);
+                
+                const link = document.createElement("a");
+                link.href = zipUrl;
+                link.download = `Batch_Processed_${new Date().getTime()}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(zipUrl);
+            } catch (error) {
+                console.error("ZIP Generation failed", error);
+                showMessage("Failed to create ZIP file.");
+            } finally {
+                downloadAllBtn.innerHTML = originalText;
+                downloadAllBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
